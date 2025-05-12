@@ -59,13 +59,13 @@ func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	if mediaType != "image/jpeg" && mediaType != "image/png" {
-		respondWithError(w, http.StatusBadRequest, "Invalid media type", nil)
+	if contentType == "" {
+		respondWithError(w, http.StatusBadRequest, "Missing content type header", nil)
 		return
 	}
 
-	if contentType == "" {
-		respondWithError(w, http.StatusBadRequest, "Missing content type header", nil)
+	if mediaType != "image/jpeg" && mediaType != "image/png" {
+		respondWithError(w, http.StatusBadRequest, "Invalid media type", nil)
 		return
 	}
 
