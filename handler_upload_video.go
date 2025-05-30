@@ -14,13 +14,10 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
-	"strings"
-	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/bootdotdev/learn-file-storage-s3-golang-starter/internal/auth"
-	"github.com/bootdotdev/learn-file-storage-s3-golang-starter/internal/database"
 	"github.com/google/uuid"
 )
 
@@ -150,9 +147,8 @@ func (cfg *apiConfig) handlerUploadVideo(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	bucketKey := fmt.Sprintf("%s,%s", cfg.s3Bucket, fullResourceID) // e.g. tubely,portrait/vertical.mp4
-	fmt.Printf("%s", bucketKey)
-	video.VideoURL = &bucketKey
+	videoURL := fmt.Sprintf("%s/%s", cfg.s3CfDistribution, fullResourceID)
+	video.VideoURL = &videoURL
 
 	err = cfg.db.UpdateVideo(video)
 	if err != nil {
@@ -160,11 +156,6 @@ func (cfg *apiConfig) handlerUploadVideo(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	video, err = cfg.dbVideoToSignedVideo(video)
-	if err != nil {
-		respondWithError(w, http.StatusInternalServerError, "Could not convert video URL to signed URL", err)
-		return
-	}
 	respondWithJSON(w, http.StatusOK, video)
 }
 
@@ -235,46 +226,4 @@ func processVideoForFastStart(filePath string) (string, error) {
 	}
 
 	return newFilePath, nil
-}
-
-func generatePresignedURL(s3Client *s3.Client, bucket, key string, expireTime time.Duration) (string, error) {
-	presignClient := s3.NewPresignClient(s3Client)
-
-	req := &s3.GetObjectInput{
-		Bucket: aws.String(bucket),
-		Key:    aws.String(key),
-	}
-
-	presignedReq, err := presignClient.PresignGetObject(context.Background(), req, s3.WithPresignExpires(expireTime))
-	if err != nil {
-		return "", fmt.Errorf("failed to presign request: %w", err)
-	}
-
-	return presignedReq.URL, nil
-}
-
-func (cfg *apiConfig) dbVideoToSignedVideo(video database.Video) (database.Video, error) {
-	if video.VideoURL == nil {
-		return video, nil // here I had a problem, I was returning an emtpy video. It was resetting the video to zero values
-	}
-
-	bucketKey := strings.Split(*video.VideoURL, ",")
-
-	fmt.Println(bucketKey)
-
-	if len(bucketKey) < 2 {
-		return video, fmt.Errorf("could not split video URL") // the same problem as above, I was returning an empty video
-	}
-
-	bucket := bucketKey[0]
-	key := bucketKey[1]
-
-	presignedURL, err := generatePresignedURL(cfg.s3Client, bucket, key, time.Minute*15)
-	if err != nil {
-		return video, fmt.Errorf("failed to generate presigned URL: %w", err) // god, no wonder it didn't work
-	}
-
-	video.VideoURL = &presignedURL
-
-	return video, nil
 }
